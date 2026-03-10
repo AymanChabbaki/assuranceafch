@@ -7,11 +7,20 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
-.env
 node_modules
 dist
 dist-ssr
 *.local
+
+# Hardhat
+artifacts/
+cache/
+coverage/
+coverage.json
+typechain-types/
+
+# Secrets — NEVER commit these
+.env
 
 # Editor directories and files
 .vscode/*

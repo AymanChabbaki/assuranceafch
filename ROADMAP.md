@@ -119,8 +119,8 @@ Decentralized Insurance Application using Solidity Smart Contracts, React/TypeSc
 
 | Phase | Status       |
 |-------|-------------|
-| Phase 1 — Smart Contract | 🔴 Not Started |
-| Phase 2 — Backend        | 🔴 Not Started |
+| Phase 1 — Smart Contract | ✅ Complete — deployed `0xBF7b35D93622974F005EaFC5553FD521D7Be71d4` (Sepolia) |
+| Phase 2 — Backend        | ✅ Complete |
 | Phase 3 — Frontend       | 🔴 Not Started |
 | Phase 4 — Integration    | 🔴 Not Started |
 | Phase 5 — Security & Deploy | 🔴 Not Started |
