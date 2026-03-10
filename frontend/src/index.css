@@ -1,68 +1,278 @@
+/* ─── Design tokens ──────────────────────────────────────────────── */
 :root {
+  --bg:          #0f1117;
+  --bg-card:     #1a1d26;
+  --bg-card-alt: #20242f;
+  --border:      #2d3245;
+  --text:        #e2e6f0;
+  --text-muted:  #7a84a0;
+  --accent:      #5c7cfa;
+  --accent-h:    #3b5bdb;
+  --success:     #40c057;
+  --warning:     #fab005;
+  --danger:      #fa5252;
+  --radius:      10px;
+  --shadow:      0 2px 12px rgba(0,0,0,0.35);
+
   font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
-  line-height: 1.5;
-  font-weight: 400;
-
-  color-scheme: light dark;
-  color: rgba(255, 255, 255, 0.87);
-  background-color: #242424;
-
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--text);
+  background-color: var(--bg);
   -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
 }
 
 a {
-  font-weight: 500;
-  color: #646cff;
-  text-decoration: inherit;
+  color: var(--accent);
+  text-decoration: none;
 }
-a:hover {
-  color: #535bf2;
+a:hover { text-decoration: underline; }
+
+h2 { font-size: 1.6rem; margin-bottom: 1rem; }
+h3 { font-size: 1.15rem; margin-bottom: 0.7rem; color: var(--text-muted); }
+
+/* ─── Layout ─────────────────────────────────────────────────────── */
+.app-main {
+  flex: 1;
+  padding: 2rem 1rem;
+  max-width: 860px;
+  margin: 0 auto;
+  width: 100%;
 }
 
-body {
-  margin: 0;
+.app-footer {
+  text-align: center;
+  padding: 1.5rem 1rem;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  border-top: 1px solid var(--border);
+}
+
+.page { display: flex; flex-direction: column; gap: 1.25rem; }
+
+/* ─── Navbar ─────────────────────────────────────────────────────── */
+.navbar {
   display: flex;
-  place-items: center;
-  min-width: 320px;
-  min-height: 100vh;
+  align-items: center;
+  gap: 2rem;
+  padding: 0.75rem 1.5rem;
+  background: var(--bg-card);
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  z-index: 100;
 }
 
-h1 {
-  font-size: 3.2em;
-  line-height: 1.1;
+.navbar-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 700;
+  font-size: 1.05rem;
+  white-space: nowrap;
+}
+.logo-icon { font-size: 1.3rem; }
+
+.navbar-links {
+  display: flex;
+  gap: 0.25rem;
+  flex: 1;
 }
 
-button {
-  border-radius: 8px;
-  border: 1px solid transparent;
-  padding: 0.6em 1.2em;
-  font-size: 1em;
+.nav-link {
+  padding: 0.35rem 0.85rem;
+  border-radius: 6px;
+  color: var(--text-muted);
+  font-size: 0.9rem;
   font-weight: 500;
-  font-family: inherit;
-  background-color: #1a1a1a;
-  cursor: pointer;
-  transition: border-color 0.25s;
+  transition: background 0.15s, color 0.15s;
+  text-decoration: none;
 }
-button:hover {
-  border-color: #646cff;
-}
-button:focus,
-button:focus-visible {
-  outline: 4px auto -webkit-focus-ring-color;
+.nav-link:hover { color: var(--text); background: var(--bg-card-alt); }
+.nav-link.active { color: var(--accent); background: rgba(92,124,250,0.12); }
+
+.navbar-wallet { margin-left: auto; }
+
+/* ─── Wallet bar (WalletConnect component) ───────────────────────── */
+.wallet-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-size: 0.82rem;
 }
 
-@media (prefers-color-scheme: light) {
-  :root {
-    color: #213547;
-    background-color: #ffffff;
-  }
-  a:hover {
-    color: #747bff;
-  }
-  button {
-    background-color: #f9f9f9;
-  }
+.badge-admin {
+  background: rgba(92,124,250,0.2);
+  color: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  padding: 1px 6px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+/* ─── Buttons ─────────────────────────────────────────────────────── */
+button {
+  border: none;
+  border-radius: var(--radius);
+  padding: 0.55em 1.3em;
+  font-size: 0.95rem;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: opacity 0.15s, transform 0.1s;
+}
+button:disabled { opacity: 0.5; cursor: not-allowed; }
+button:not(:disabled):active { transform: scale(0.97); }
+
+.btn-primary   { background: var(--accent);  color: #fff; }
+.btn-primary:not(:disabled):hover { background: var(--accent-h); }
+
+.btn-success   { background: var(--success); color: #fff; }
+.btn-success:not(:disabled):hover { opacity: 0.85; }
+
+.btn-warning   { background: var(--warning); color: #000; }
+.btn-warning:not(:disabled):hover { opacity: 0.85; }
+
+.btn-danger    { background: var(--danger);  color: #fff; }
+.btn-danger:not(:disabled):hover { opacity: 0.85; }
+
+/* ─── Cards ──────────────────────────────────────────────────────── */
+.card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.25rem 1.4rem;
+  box-shadow: var(--shadow);
+}
+.card.error { border-color: var(--danger); }
+
+/* ─── Info grid ──────────────────────────────────────────────────── */
+.info-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 1px;
+  background: var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  padding: 0;
+  border: 1px solid var(--border);
+}
+
+.info-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  padding: 1rem 1.2rem;
+  background: var(--bg-card);
+}
+
+.info-item .label {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.info-item .value {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--text);
+}
+.info-item .value.safe   { color: var(--success); }
+.info-item .value.danger { color: var(--danger); }
+
+/* ─── Status / hint ──────────────────────────────────────────────── */
+.hint {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  margin-top: 0.4rem;
+}
+.hint.warning { color: var(--warning); }
+.hint.error   { color: var(--danger); }
+.hint.safe    { color: var(--success); }
+
+p.warning {
+  color: var(--warning);
+  font-size: 0.88rem;
+  margin: 0.5rem 0;
+}
+
+/* ─── TX status box ──────────────────────────────────────────────── */
+.tx-status {
+  border-radius: var(--radius);
+  padding: 0.9rem 1.1rem;
+  font-size: 0.88rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+.tx-status.success { background: rgba(64,192,87,0.1);  border: 1px solid var(--success); }
+.tx-status.error   { background: rgba(250,82,82,0.1);  border: 1px solid var(--danger); }
+.tx-status.pending { background: rgba(250,176,5,0.1);  border: 1px solid var(--warning); }
+
+/* ─── Tables ─────────────────────────────────────────────────────── */
+.table-wrapper { overflow-x: auto; }
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.87rem;
+}
+th, td {
+  text-align: left;
+  padding: 0.55rem 0.8rem;
+  border-bottom: 1px solid var(--border);
+}
+th {
+  color: var(--text-muted);
+  font-weight: 600;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+tr:last-child td { border-bottom: none; }
+tr:hover td { background: var(--bg-card-alt); }
+
+/* ─── Event badges ───────────────────────────────────────────────── */
+.event-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+.event-subscribed        { background: rgba(92,124,250,0.15); color: var(--accent); }
+.event-sinisterdeclared  { background: rgba(250,176,5,0.15);  color: var(--warning); }
+.event-claimpaid         { background: rgba(64,192,87,0.15);  color: var(--success); }
+.event-contractfunded    { background: rgba(200,200,200,0.1); color: var(--text-muted); }
+
+/* ─── User status section ────────────────────────────────────────── */
+.user-status {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+.user-status .status-row {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  font-size: 0.9rem;
+}
+
+/* ─── Responsive ─────────────────────────────────────────────────── */
+@media (max-width: 600px) {
+  .navbar { flex-wrap: wrap; gap: 0.75rem; }
+  .navbar-links { order: 3; width: 100%; }
+  .navbar-wallet { margin-left: 0; }
+  .app-main { padding: 1rem 0.75rem; }
 }

@@ -1,35 +1,64 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from '/vite.svg'
-import './App.css'
+import { BrowserRouter, Routes, Route, NavLink } from "react-router-dom";
+import { useWallet } from "./hooks/useWallet";
+import WalletConnect from "./components/WalletConnect";
+import UserPage from "./pages/UserPage";
+import AdminPage from "./pages/AdminPage";
+import DashboardPage from "./pages/DashboardPage";
+import "./App.css";
 
 function App() {
-  const [count, setCount] = useState(0)
+  const { wallet, connect, switchToSepolia, getSigner } = useWallet();
 
   return (
-    <>
-      <div>
-        <a href="https://vite.dev" target="_blank">
-          <img src={viteLogo} className="logo" alt="Vite logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
-      </div>
-      <h1>Vite + React</h1>
-      <div className="card">
-        <button onClick={() => setCount((count) => count + 1)}>
-          count is {count}
-        </button>
+    <BrowserRouter>
+      <header className="navbar">
+        <div className="navbar-brand">
+          <span className="logo-icon">🛡️</span>
+          <span className="brand-name">DeFi Insurance</span>
+        </div>
+
+        <nav className="navbar-links">
+          <NavLink to="/" end className={({ isActive }) => isActive ? "nav-link active" : "nav-link"}>
+            My Insurance
+          </NavLink>
+          <NavLink to="/dashboard" className={({ isActive }) => isActive ? "nav-link active" : "nav-link"}>
+            Dashboard
+          </NavLink>
+          {wallet.isOwner && (
+            <NavLink to="/admin" className={({ isActive }) => isActive ? "nav-link active" : "nav-link"}>
+              Admin
+            </NavLink>
+          )}
+        </nav>
+
+        <div className="navbar-wallet">
+          <WalletConnect wallet={wallet} onConnect={connect} onSwitch={switchToSepolia} />
+        </div>
+      </header>
+
+      <main className="app-main">
+        <Routes>
+          <Route path="/" element={<UserPage wallet={wallet} getSigner={getSigner} />} />
+          <Route path="/dashboard" element={<DashboardPage />} />
+          <Route path="/admin" element={<AdminPage wallet={wallet} getSigner={getSigner} />} />
+        </Routes>
+      </main>
+
+      <footer className="app-footer">
         <p>
-          Edit <code>src/App.tsx</code> and save to test HMR
+          Contract:{" "}
+          <a
+            href={`https://sepolia.etherscan.io/address/${import.meta.env.VITE_CONTRACT_ADDRESS}`}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            {import.meta.env.VITE_CONTRACT_ADDRESS}
+          </a>{" "}
+          · Sepolia Testnet
         </p>
-      </div>
-      <p className="read-the-docs">
-        Click on the Vite and React logos to learn more
-      </p>
-    </>
-  )
+      </footer>
+    </BrowserRouter>
+  );
 }
 
-export default App
+export default App;
