@@ -1,0 +1,80 @@
+Cahier des Charges : Application Décentralisée (DApp) d'Assurance
+1. Présentation du Projet
+Objectif : Concevoir et développer une application décentralisée (DApp) permettant la souscription à un contrat d'assurance automatisé et le versement d'indemnités via un Smart Contract, en garantissant un haut niveau de sécurité et de transparence.
+
+Acteurs du système :
+
+Utilisateur (Assuré) : Souscrit à l'assurance via le paiement d'une prime en cryptomonnaie et reçoit une indemnité en cas de sinistre.
+
+Administrateur (Oracle/Assureur) : Déclare et valide l'événement déclencheur (sinistre) sur la blockchain pour déclencher les paiements.
+
+2. Architecture Globale (Cloud & Blockchain)
+Le système repose sur une architecture hybride combinant l'immuabilité de la blockchain et la disponibilité du Cloud.
+
+Couche Blockchain (On-Chain) : Héberge le Smart Contract contenant la logique métier (gestion des fonds, liste des assurés, règles d'indemnisation). Réseau recommandé : Ethereum (Testnet Sepolia) ou Polygon (pour des frais réduits).
+
+Couche Cloud (Off-Chain) : Hébergement des interfaces web (Frontend) sur une infrastructure Cloud (ex: AWS S3, Vercel, ou Google Cloud Run) pour assurer une haute disponibilité.
+
+Interaction : Les interfaces communiquent avec la blockchain via une bibliothèque Web3 (ex: Ethers.js ou Web3.js) et un fournisseur de nœuds (ex: Infura ou Alchemy).
+
+3. Spécifications Fonctionnelles
+Interface de Souscription (Côté Utilisateur) :
+
+Connexion du portefeuille Web3 (ex: MetaMask).
+
+Affichage des détails du contrat (montant de la prime, montant de couverture, conditions).
+
+Bouton de paiement appelant la fonction subscribe() du Smart Contract.
+
+Interface d'Administration (Côté Admin) :
+
+Accès restreint par l'adresse du portefeuille de l'administrateur.
+
+Bouton pour déclencher un sinistre de manière globale ou ciblée, appelant la fonction triggerPayout() du Smart Contract.
+
+Tableau de Bord / Transparence :
+
+Affichage en temps réel des utilisateurs souscrits (lecture des données de la blockchain).
+
+Affichage de l'historique des indemnisations avec les hachages de transactions (TxHash) pour preuve.
+
+4. Spécifications Techniques : Focus Blockchain
+Le cœur du système est un Smart Contract développé en Solidity.
+
+Fonctions principales du Smart Contract :
+
+constructor() : Définit l'adresse de l'administrateur (Owner), le montant de la prime et le montant de l'indemnisation.
+
+subscribe() : Fonction payable permettant à un utilisateur d'envoyer des fonds. Le contrat enregistre l'adresse de l'utilisateur dans une structure de données (mapping).
+
+triggerPayout() : Fonction restreinte à l'administrateur (modificateur onlyOwner). Elle itère sur la liste des assurés éligibles (ou prend une adresse spécifique en paramètre) et déclenche automatiquement le transfert des fonds vers leurs portefeuilles.
+
+getInsuredUsers() : Fonction de lecture (View) renvoyant la liste des assurés pour l'affichage Frontend.
+
+5. Exigences de Sécurité (Critique)
+La sécurité est primordiale, car le Smart Contract manipulera de la valeur (cryptomonnaie).
+
+Sécurité du Smart Contract (Blockchain) :
+
+Protection contre la Réentrance (Reentrancy Attack) : Utilisation du modificateur nonReentrant d'OpenZeppelin ou application stricte du pattern Checks-Effects-Interactions lors des paiements d'indemnités pour éviter qu'un contrat malveillant ne draine les fonds.
+
+Contrôle d'Accès Strict : Utilisation de la bibliothèque Ownable d'OpenZeppelin. Seul l'administrateur certifié doit pouvoir appeler la fonction de déclenchement du sinistre.
+
+Gestion des limites de Gaz (Denial of Service) : Si la fonction triggerPayout boucle sur une très grande liste d'utilisateurs, la transaction risque d'échouer (Out of Gas). Il faudra privilégier un système où l'utilisateur réclame lui-même ses fonds (claim()) une fois le sinistre déclaré par l'admin, appelé "Pull over Push".
+
+Pas de données sensibles On-Chain : Aucune donnée personnelle (nom, adresse physique) ne doit être stockée sur la blockchain (RGPD). Seules les adresses cryptographiques (0x...) sont utilisées.
+
+Sécurité des Interfaces et du Cloud :
+
+Protection des clés privées : La clé privée de l'administrateur ne doit jamais être stockée dans le code source ou sur le Cloud. Elle doit être gérée via un portefeuille matériel (Hardware Wallet) ou un service KMS (Key Management Service) sécurisé.
+
+Sécurisation du Frontend : Mise en place d'un certificat SSL/TLS (HTTPS) obligatoire sur le serveur Cloud pour éviter les attaques de type Man-In-The-Middle lors de la connexion du portefeuille Web3.
+
+6. Livrables Attendus
+Le code source du Smart Contract (Solidity).
+
+Le code source de l'application Web (Frontend).
+
+Un rapport d'audit de sécurité statique du code Solidity (réalisé avec des outils comme Slither ou Mythril).
+
+Une documentation de déploiement (comment déployer sur le Cloud et comment déployer le contrat sur le Testnet).
