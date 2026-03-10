@@ -3,7 +3,7 @@
 
 require("dotenv").config();
 const express = require("express");
-const { helmet, corsOptions, limiter } = require("./src/middleware/security");
+const { helmet, corsOptions, limiterLight, limiterHeavy } = require("./src/middleware/security");
 const cors = require("cors");
 const { init: initEventCache } = require("./src/config/eventCache");
 
@@ -18,18 +18,17 @@ const PORT = process.env.PORT || 3000;
 // ── Security Middleware ───────────────────────────────────────────────────────
 app.use(helmet());               // Sets secure HTTP headers (XSS, clickjacking, etc.)
 app.use(cors(corsOptions));      // Restrict to frontend origin only
-app.use(limiter);                // Rate limiting — 100 req / 15 min per IP
-app.use(express.json());         // Parse JSON bodies (for future POST routes if needed)
+app.use(express.json());         // Parse JSON bodies
 
 // ── Health Check ──────────────────────────────────────────────────────────────
 app.get("/api/health", (req, res) => {
   res.json({ status: "ok", timestamp: new Date().toISOString() });
 });
 
-// ── API Routes ────────────────────────────────────────────────────────────────
-app.use("/api/contract-info",  contractInfoRouter);
-app.use("/api/insured-users",  insuredUsersRouter);
-app.use("/api/transactions",   transactionsRouter);
+// ── API Routes (each with its own rate limiter) ───────────────────────────────
+app.use("/api/contract-info",  limiterLight,  contractInfoRouter);
+app.use("/api/insured-users",  limiterLight,  insuredUsersRouter);
+app.use("/api/transactions",   limiterHeavy,  transactionsRouter);
 
 // ── 404 Handler ───────────────────────────────────────────────────────────────
 app.use((req, res) => {

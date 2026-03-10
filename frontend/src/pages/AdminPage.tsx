@@ -1,9 +1,16 @@
 // src/pages/AdminPage.tsx
-// Admin interface — restricted to owner wallet address.
-// Only the declareSinister() function is available here.
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { ethers } from "ethers";
+import {
+  Lock, Users, Activity, AlertTriangle, CheckCircle,
+  XCircle, Loader, ExternalLink, Zap, Info, BarChart2, PieChart as PieIcon,
+} from "lucide-react";
+import {
+  RadialBarChart, RadialBar, PolarAngleAxis, ResponsiveContainer,
+  PieChart, Pie, Cell, Tooltip, Legend,
+  BarChart, Bar, XAxis, YAxis, CartesianGrid,
+} from "recharts";
 import { useContractInfo } from "../hooks/useContractInfo";
 import { CONTRACT_ADDRESS, CONTRACT_ABI } from "../config/contract";
 import type { WalletState } from "../types";
@@ -13,131 +20,317 @@ interface Props {
   getSigner: () => Promise<ethers.Signer | null>;
 }
 
+interface TxResult { type: "success" | "error" | "pending"; message: string; hash?: string; }
+
 export default function AdminPage({ wallet, getSigner }: Props) {
   const { info, loading, refetch } = useContractInfo();
-  const [txStatus, setTxStatus] = useState<string | null>(null);
+  const [tx, setTx] = useState<TxResult | null>(null);
   const [busy, setBusy] = useState(false);
 
-  // Access control — non-admin sees nothing useful
-  if (!wallet.isConnected) {
-    return (
-      <div className="page">
-        <div className="card error">
-          <p>🔒 Connect your admin wallet to access this page.</p>
-        </div>
+  if (!wallet.isConnected) return (
+    <div className="page">
+      <div className="alert alert-info">
+        <Lock size={16} className="alert-icon" />
+        <p>Connect your admin wallet to access this panel.</p>
       </div>
-    );
-  }
+    </div>
+  );
 
-  if (!wallet.isOwner) {
-    return (
-      <div className="page">
-        <div className="card error">
-          <p>⛔ Access denied — this page is reserved for the contract admin.</p>
-          <p className="hint">Connected: {wallet.address}</p>
-        </div>
+  if (!wallet.isOwner) return (
+    <div className="page">
+      <div className="alert alert-danger">
+        <XCircle size={16} className="alert-icon" />
+        <p>
+          Access denied — this panel is reserved for the contract owner.<br />
+          <span style={{ opacity: 0.7, fontSize: "0.78rem" }}>Connected: {wallet.address}</span>
+        </p>
       </div>
-    );
-  }
+    </div>
+  );
 
-  if (wallet.wrongNetwork) {
-    return (
-      <div className="page">
-        <div className="card error">
-          <p>⚠️ Please switch to Sepolia network.</p>
-        </div>
+  if (wallet.wrongNetwork) return (
+    <div className="page">
+      <div className="alert alert-warning">
+        <AlertTriangle size={16} className="alert-icon" />
+        <p>Please switch to the Sepolia testnet.</p>
       </div>
-    );
-  }
+    </div>
+  );
 
   async function handleDeclareSinister() {
-    setBusy(true);
-    setTxStatus(null);
+    setBusy(true); setTx(null);
     try {
       const signer = await getSigner();
       if (!signer) return;
       const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
-      const tx = await contract.declareSinister();
-      setTxStatus("⏳ Transaction submitted — waiting for confirmation...");
-      await tx.wait();
-      setTxStatus(`✅ Sinister declared! TxHash: ${tx.hash}`);
+      const txObj = await contract.declareSinister();
+      setTx({ type: "pending", message: "Transaction submitted — waiting for confirmation…" });
+      await txObj.wait();
+      setTx({ type: "success", message: "Sinister declared successfully. Payouts are now open.", hash: txObj.hash });
       refetch();
     } catch (err: unknown) {
       const msg = (err as { reason?: string; message?: string }).reason || (err as { message?: string }).message || "Transaction failed";
-      setTxStatus(`❌ ${msg}`);
-    } finally {
-      setBusy(false);
-    }
+      setTx({ type: "error", message: msg });
+    } finally { setBusy(false); }
   }
+
+  const ethNeeded = info
+    ? (parseFloat(info.payoutEth) * parseInt(info.insuredCount)).toFixed(4)
+    : "…";
+  const isSolvent = info
+    ? parseFloat(info.contractBalanceEth) >= parseFloat(ethNeeded)
+    : null;
+
+  // ── Chart data ─────────────────────────────────────────────────────────────
+  const solvencyPercent = useMemo(() => {
+    if (!info) return 0;
+    const needed = parseFloat(ethNeeded);
+    if (needed === 0) return 100;
+    return Math.min(100, Math.round((parseFloat(info.contractBalanceEth) / needed) * 100));
+  }, [info, ethNeeded]);
+
+  const radialData = useMemo(() => [
+    { name: "Coverage", value: solvencyPercent, fill: solvencyPercent >= 100 ? "#22c55e" : solvencyPercent >= 50 ? "#f59e0b" : "#ef4444" },
+  ], [solvencyPercent]);
+
+  const ethPieData = useMemo(() => {
+    if (!info) return [];
+    const balance = parseFloat(info.contractBalanceEth);
+    const needed  = parseFloat(ethNeeded);
+    const surplus = Math.max(0, balance - needed);
+    const locked  = Math.min(balance, needed);
+    return [
+      { name: "Locked for payouts", value: parseFloat(locked.toFixed(4)),   color: "#6366f1" },
+      { name: "Surplus",            value: parseFloat(surplus.toFixed(4)),  color: "#22c55e" },
+    ].filter(d => d.value > 0);
+  }, [info, ethNeeded]);
+
+  const ethBarData = useMemo(() => {
+    if (!info) return [];
+    return [
+      { name: "Balance",  eth: parseFloat(info.contractBalanceEth), fill: "#6366f1" },
+      { name: "Required", eth: parseFloat(ethNeeded),               fill: "#f59e0b" },
+      { name: "Premium",  eth: parseFloat(info.premiumEth),         fill: "#38bdf8" },
+      { name: "Payout",   eth: parseFloat(info.payoutEth),          fill: "#22c55e" },
+    ];
+  }, [info, ethNeeded]);
 
   return (
     <div className="page">
-      <h2>🔐 Admin Panel</h2>
-      <p className="hint">Connected as: <strong>{wallet.address}</strong></p>
 
+      {/* Header */}
+      <div className="page-header">
+        <div>
+          <p className="page-eyebrow">Owner Controls</p>
+          <h2>Admin Panel</h2>
+          <p className="page-description">
+            Connected as <strong>{wallet.address?.slice(0, 10)}…{wallet.address?.slice(-6)}</strong>
+          </p>
+        </div>
+        <span className="badge-admin" style={{ alignSelf: "flex-start", marginTop: "0.5rem" }}>Admin</span>
+      </div>
+
+      {/* Contract overview */}
       {loading ? (
-        <p>Loading…</p>
+        <div className="loading-container">
+          <Loader size={18} className="spinner" />
+          <span>Loading…</span>
+        </div>
       ) : (
         <>
-          {/* Contract state */}
-          <div className="card info-grid">
-            <div className="info-item">
-              <span className="label">Insured users</span>
-              <span className="value">{info?.insuredCount}</span>
+          <div className="stats-grid">
+            <div className="stat-item">
+              <div className="stat-label"><Users size={12} /> Insured users</div>
+              <div className="stat-value accent">{info?.insuredCount}</div>
+              <div className="stat-sub">active policies</div>
             </div>
-            <div className="info-item">
-              <span className="label">Contract balance</span>
-              <span className="value">{info?.contractBalanceEth} ETH</span>
+            <div className="stat-item">
+              <div className="stat-label"><Activity size={12} /> Pool balance</div>
+              <div className="stat-value">{info?.contractBalanceEth} ETH</div>
+              <div className="stat-sub">in contract</div>
             </div>
-            <div className="info-item">
-              <span className="label">Sinister declared</span>
-              <span className={`value ${info?.sinisterDeclared ? "danger" : "safe"}`}>
-                {info?.sinisterDeclared ? "⚠️ YES — Payouts are open" : "✅ Not yet"}
-              </span>
+            <div className="stat-item">
+              <div className="stat-label"><Zap size={12} /> Required payout</div>
+              <div className="stat-value">{ethNeeded} ETH</div>
+              <div className="stat-sub">to cover all users</div>
+            </div>
+            <div className="stat-item">
+              <div className="stat-label"><AlertTriangle size={12} /> Sinister status</div>
+              <div className={`stat-value ${info?.sinisterDeclared ? "danger" : "safe"}`}>
+                {info?.sinisterDeclared ? "Declared" : "None"}
+              </div>
+              <div className="stat-sub">{info?.sinisterDeclared ? "payouts open" : "no incident"}</div>
             </div>
           </div>
 
-          {/* Declare Sinister */}
+          {/* ── Charts ──────────────────────────────────────────────────── */}
+          <div className="charts-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))" }}>
+
+            {/* Radial — pool coverage % */}
+            <div className="card chart-card">
+              <div className="card-header">
+                <div className="card-header-icon icon-blue"><Activity size={17} /></div>
+                <div>
+                  <div className="card-title">Pool Coverage</div>
+                  <div className="card-subtitle">Balance vs required payout</div>
+                </div>
+              </div>
+              <div style={{ position: "relative" }}>
+                <ResponsiveContainer width="100%" height={200}>
+                  <RadialBarChart
+                    cx="50%" cy="50%"
+                    innerRadius="60%" outerRadius="90%"
+                    startAngle={90} endAngle={-270}
+                    data={radialData}
+                  >
+                    <PolarAngleAxis type="number" domain={[0, 100]} tick={false} />
+                    <RadialBar dataKey="value" cornerRadius={8} background={{ fill: "rgba(255,255,255,0.05)" }} />
+                  </RadialBarChart>
+                </ResponsiveContainer>
+                <div style={{
+                  position: "absolute", top: "50%", left: "50%",
+                  transform: "translate(-50%, -50%)",
+                  textAlign: "center", pointerEvents: "none",
+                }}>
+                  <div style={{ fontSize: "1.6rem", fontWeight: 700, color: radialData[0]?.fill }}>
+                    {solvencyPercent}%
+                  </div>
+                  <div style={{ fontSize: "0.7rem", color: "var(--text-muted)", marginTop: 2 }}>covered</div>
+                </div>
+              </div>
+            </div>
+
+            {/* Pie — ETH allocation */}
+            <div className="card chart-card">
+              <div className="card-header">
+                <div className="card-header-icon icon-blue"><PieIcon size={17} /></div>
+                <div>
+                  <div className="card-title">ETH Allocation</div>
+                  <div className="card-subtitle">How pool funds are distributed</div>
+                </div>
+              </div>
+              {ethPieData.length > 0 ? (
+                <ResponsiveContainer width="100%" height={200}>
+                  <PieChart>
+                    <Pie data={ethPieData} dataKey="value" nameKey="name"
+                      cx="50%" cy="50%" innerRadius={50} outerRadius={78}
+                      paddingAngle={3} strokeWidth={0}>
+                      {ethPieData.map((e, i) => <Cell key={i} fill={e.color} />)}
+                    </Pie>
+                    <Tooltip
+                      contentStyle={{ background: "var(--bg-card)", border: "1px solid var(--border)", borderRadius: 8, color: "var(--text)" }}
+                      formatter={(v: any) => [`${v ?? 0} ETH`, ""]}
+                    />
+                    <Legend iconType="circle" iconSize={9}
+                      wrapperStyle={{ fontSize: "0.78rem", color: "var(--text-muted)" }} />
+                  </PieChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="empty-state" style={{ padding: "2rem" }}>
+                  <p>No funds in contract yet.</p>
+                </div>
+              )}
+            </div>
+
+            {/* Bar — key ETH figures */}
+            <div className="card chart-card">
+              <div className="card-header">
+                <div className="card-header-icon icon-blue"><BarChart2 size={17} /></div>
+                <div>
+                  <div className="card-title">ETH Overview</div>
+                  <div className="card-subtitle">Balance, required, premium &amp; payout</div>
+                </div>
+              </div>
+              <ResponsiveContainer width="100%" height={200}>
+                <BarChart data={ethBarData} barCategoryGap="30%">
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
+                  <XAxis dataKey="name" tick={{ fill: "var(--text-muted)", fontSize: 11 }} axisLine={false} tickLine={false} />
+                  <YAxis tick={{ fill: "var(--text-muted)", fontSize: 11 }} axisLine={false} tickLine={false} width={36}
+                    tickFormatter={(v: any) => `${v ?? ""}`} />
+                  <Tooltip
+                    cursor={{ fill: "rgba(255,255,255,0.04)" }}
+                    contentStyle={{ background: "var(--bg-card)", border: "1px solid var(--border)", borderRadius: 8, color: "var(--text)" }}
+                    formatter={(v: any) => [`${v ?? 0} ETH`, ""]}
+                  />
+                  <Bar dataKey="eth" radius={[4, 4, 0, 0]}>
+                    {ethBarData.map((e, i) => <Cell key={i} fill={e.fill} />)}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+
+          </div>
+
+          {/* Solvency check */}
+          {isSolvent === false && (
+            <div className="alert alert-warning">
+              <AlertTriangle size={16} className="alert-icon" />
+              <p>
+                <strong>Underfunded:</strong> The contract only has {info?.contractBalanceEth} ETH
+                but needs {ethNeeded} ETH to pay all {info?.insuredCount} insured users.
+                Fund the contract before declaring a sinister.
+              </p>
+            </div>
+          )}
+
+          {/* Declare sinister card */}
           <div className="card">
-            <h3>Declare a Sinister</h3>
-            <p>
-              This will enable all insured users to claim their payout of{" "}
-              <strong>{info?.payoutEth} ETH</strong> each.
-            </p>
-            <p className="hint warning">
-              ⚠️ This action is <strong>irreversible</strong>. Make sure the contract
-              has enough ETH to cover all {info?.insuredCount} insured users (
-              {info ? (parseFloat(info.payoutEth) * parseInt(info.insuredCount)).toFixed(4) : "…"} ETH needed).
-            </p>
+            <div className="card-header">
+              <div className="card-header-icon icon-red"><Zap size={17} /></div>
+              <div>
+                <div className="card-title">Declare a Sinister</div>
+                <div className="card-subtitle">Irreversible on-chain action</div>
+              </div>
+            </div>
 
             {info?.sinisterDeclared ? (
-              <p className="hint safe">✅ Sinister already declared. Users can now claim.</p>
+              <div className="alert alert-success">
+                <CheckCircle size={16} className="alert-icon" />
+                <p>Sinister already declared. All insured users can now claim their payout of <strong>{info.payoutEth} ETH</strong>.</p>
+              </div>
             ) : (
-              <button
-                className="btn btn-danger"
-                onClick={handleDeclareSinister}
-                disabled={busy}
-              >
-                {busy ? "Processing…" : "⚡ Declare Sinister"}
-              </button>
+              <div className="action-card">
+                <p className="action-description">
+                  Declaring a sinister will allow all <strong>{info?.insuredCount}</strong> insured
+                  users to claim a payout of <strong>{info?.payoutEth} ETH</strong> each
+                  (total: <strong>{ethNeeded} ETH</strong>).
+                </p>
+
+                <div className="alert alert-warning">
+                  <Info size={15} className="alert-icon" />
+                  <p>This action is <strong>irreversible</strong>. Once declared, you cannot undo it.
+                  Ensure the contract contains sufficient funds.</p>
+                </div>
+
+                <button
+                  className="btn btn-danger"
+                  onClick={handleDeclareSinister}
+                  disabled={busy}
+                >
+                  {busy
+                    ? <><Loader size={14} className="spinner" /> Processing…</>
+                    : <><Zap size={15} /> Declare Sinister</>}
+                </button>
+              </div>
             )}
           </div>
         </>
       )}
 
-      {/* Transaction status */}
-      {txStatus && (
-        <div className={`tx-status ${txStatus.startsWith("✅") ? "success" : txStatus.startsWith("❌") ? "error" : "pending"}`}>
-          <p>{txStatus}</p>
-          {txStatus.includes("TxHash:") && (
-            <a
-              href={`https://sepolia.etherscan.io/tx/${txStatus.split("TxHash: ")[1]}`}
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              View on Etherscan ↗
-            </a>
-          )}
+      {/* TX feedback */}
+      {tx && (
+        <div className={`tx-status ${tx.type}`}>
+          {tx.type === "pending" && <Loader size={15} className="spinner" style={{ flexShrink: 0 }} />}
+          {tx.type === "success" && <CheckCircle size={15} style={{ flexShrink: 0 }} />}
+          {tx.type === "error"   && <XCircle size={15} style={{ flexShrink: 0 }} />}
+          <div className="tx-status-body">
+            <span>{tx.message}</span>
+            {tx.hash && (
+              <a href={`https://sepolia.etherscan.io/tx/${tx.hash}`} target="_blank" rel="noopener noreferrer">
+                View on Etherscan <ExternalLink size={11} style={{ display: "inline", verticalAlign: "middle" }} />
+              </a>
+            )}
+          </div>
         </div>
       )}
     </div>

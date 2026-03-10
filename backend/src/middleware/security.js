@@ -15,13 +15,20 @@ const corsOptions = {
 };
 
 // ── Rate Limiting ─────────────────────────────────────────────────────────────
-// Max 100 requests per 15 minutes per IP — prevents scraping / DoS
-const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 100,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { error: "Too many requests, please try again later." },
-});
+// Separate limiters per route so polling doesn't exhaust a single shared bucket.
+// Light data (contract-info, insured-users): 300 req / 15 min per IP.
+// Heavy data (transactions / event scan):    120 req / 15 min per IP.
+function makeLimiter(max) {
+  return rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: "Too many requests, please try again later." },
+  });
+}
 
-module.exports = { helmet, corsOptions, limiter };
+const limiterLight  = makeLimiter(300);
+const limiterHeavy  = makeLimiter(120);
+
+module.exports = { helmet, corsOptions, limiterLight, limiterHeavy };

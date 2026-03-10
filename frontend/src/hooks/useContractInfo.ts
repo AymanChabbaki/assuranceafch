@@ -25,7 +25,7 @@ export function useContractInfo() {
 
   useEffect(() => {
     fetch();
-    const interval = setInterval(fetch, 15_000);
+    const interval = setInterval(fetch, 30_000);
     return () => clearInterval(interval);
   }, [fetch]);
 

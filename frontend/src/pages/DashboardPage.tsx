@@ -1,10 +1,18 @@
 // src/pages/DashboardPage.tsx
-// Public transparency dashboard — insured users list + full event history.
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
+import {
+  BarChart2, Users, Hash, ExternalLink, Loader,
+  CheckCircle, Clock, AlertCircle, RefreshCw, PieChart as PieIcon,
+} from "lucide-react";
+import {
+  PieChart, Pie, Cell, Tooltip, ResponsiveContainer,
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Legend,
+} from "recharts";
 import axios from "axios";
 import { API_URL } from "../config/contract";
 import type { InsuredUser, BlockchainEvent } from "../types";
+
 
 export default function DashboardPage() {
   const [users, setUsers]     = useState<InsuredUser[]>([]);
@@ -12,6 +20,7 @@ export default function DashboardPage() {
   const [usersLoading, setUsersLoading]   = useState(true);
   const [eventsLoading, setEventsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
   const fetchUsers = useCallback(async () => {
     try {
@@ -32,13 +41,14 @@ export default function DashboardPage() {
       // 503 while cache is loading — silent retry
     } finally {
       setEventsLoading(false);
+      setLastUpdated(new Date());
     }
   }, []);
 
   useEffect(() => {
     fetchUsers();
     fetchEvents();
-    const interval = setInterval(() => { fetchUsers(); fetchEvents(); }, 15_000);
+    const interval = setInterval(() => { fetchUsers(); fetchEvents(); }, 30_000);
     return () => clearInterval(interval);
   }, [fetchUsers, fetchEvents]);
 
@@ -47,19 +57,181 @@ export default function DashboardPage() {
     return `${addr.slice(0, 6)}…${addr.slice(-4)}`;
   }
 
+  function eventLabel(type: string) {
+    if (type === "SUBSCRIPTION")      return "Subscribed";
+    if (type === "SINISTER_DECLARED") return "Sinister";
+    if (type === "PAYOUT")            return "Payout";
+    return type;
+  }
+
+  // ── Chart data ──────────────────────────────────────────────────────────────
+
+  const claimPieData = useMemo(() => {
+    const claimed  = users.filter(u => u.hasClaimed).length;
+    const pending  = users.length - claimed;
+    return [
+      { name: "Claimed",  value: claimed,  color: "#22c55e" },
+      { name: "Pending",  value: pending,  color: "#6366f1" },
+    ].filter(d => d.value > 0);
+  }, [users]);
+
+  const eventBarData = useMemo(() => {
+    const counts: Record<string, number> = { Subscriptions: 0, Sinisters: 0, Payouts: 0 };
+    events.forEach(ev => {
+      if (ev.type === "SUBSCRIPTION")      counts.Subscriptions++;
+      if (ev.type === "SINISTER_DECLARED") counts.Sinisters++;
+      if (ev.type === "PAYOUT")            counts.Payouts++;
+    });
+    return [
+      { name: "Subscriptions", count: counts.Subscriptions, fill: "#6366f1" },
+      { name: "Sinisters",     count: counts.Sinisters,     fill: "#f59e0b" },
+      { name: "Payouts",       count: counts.Payouts,        fill: "#22c55e" },
+    ];
+  }, [events]);
+
+  const chartReady = !usersLoading && !eventsLoading;
+
   return (
     <div className="page">
-      <h2>📊 Transparency Dashboard</h2>
 
-      {error && <p className="hint error">{error}</p>}
+      {/* Header */}
+      <div className="page-header">
+        <div>
+          <p className="page-eyebrow">On-chain Transparency</p>
+          <h2>Dashboard</h2>
+          <p className="page-description">
+            Live view of all insured addresses and on-chain event history.
+            Updates every 15 seconds.
+          </p>
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "0.4rem" }}>
+          {lastUpdated && (
+            <span className="hint" style={{ fontSize: "0.72rem", display: "flex", alignItems: "center", gap: "0.3rem" }}>
+              <RefreshCw size={11} /> Updated {lastUpdated.toLocaleTimeString()}
+            </span>
+          )}
+        </div>
+      </div>
+
+      {error && (
+        <div className="alert alert-danger">
+          <AlertCircle size={15} className="alert-icon" />
+          <p>{error}</p>
+        </div>
+      )}
+
+      {/* ── Charts row ────────────────────────────────────────────────────── */}
+      {chartReady && (events.length > 0 || users.length > 0) && (
+        <div className="charts-grid">
+
+          {/* Pie — claim status */}
+          {users.length > 0 && (
+            <div className="card chart-card">
+              <div className="card-header">
+                <div className="card-header-icon icon-green"><PieIcon size={17} /></div>
+                <div>
+                  <div className="card-title">Payout Status</div>
+                  <div className="card-subtitle">Claimed vs pending</div>
+                </div>
+              </div>
+              <ResponsiveContainer width="100%" height={220}>
+                <PieChart>
+                  <Pie
+                    data={claimPieData}
+                    dataKey="value"
+                    nameKey="name"
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={55}
+                    outerRadius={85}
+                    paddingAngle={3}
+                    strokeWidth={0}
+                  >
+                    {claimPieData.map((entry, i) => (
+                      <Cell key={i} fill={entry.color} />
+                    ))}
+                  </Pie>
+                  <Tooltip
+                    contentStyle={{ background: "var(--bg-card)", border: "1px solid var(--border)", borderRadius: 8, color: "var(--text)" }}
+                    formatter={(v: any) => { const n = Number(v ?? 0); return [`${n} user${n !== 1 ? "s" : ""}`, ""]; }}
+                  />
+                  <Legend
+                    iconType="circle"
+                    iconSize={9}
+                    wrapperStyle={{ fontSize: "0.78rem", color: "var(--text-muted)" }}
+                  />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+
+          {/* Bar — event breakdown */}
+          {events.length > 0 && (
+            <div className="card chart-card">
+              <div className="card-header">
+                <div className="card-header-icon icon-blue"><BarChart2 size={17} /></div>
+                <div>
+                  <div className="card-title">Event Breakdown</div>
+                  <div className="card-subtitle">Events by type</div>
+                </div>
+              </div>
+              <ResponsiveContainer width="100%" height={220}>
+                <BarChart data={eventBarData} barCategoryGap="30%">
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
+                  <XAxis
+                    dataKey="name"
+                    tick={{ fill: "var(--text-muted)", fontSize: 11 }}
+                    axisLine={false}
+                    tickLine={false}
+                  />
+                  <YAxis
+                    allowDecimals={false}
+                    tick={{ fill: "var(--text-muted)", fontSize: 11 }}
+                    axisLine={false}
+                    tickLine={false}
+                    width={24}
+                  />
+                  <Tooltip
+                    cursor={{ fill: "rgba(255,255,255,0.04)" }}
+                    contentStyle={{ background: "var(--bg-card)", border: "1px solid var(--border)", borderRadius: 8, color: "var(--text)" }}
+                    formatter={(v: any) => [v ?? "", "events"]}
+                  />
+                  <Bar dataKey="count" radius={[4, 4, 0, 0]}>
+                    {eventBarData.map((entry, i) => (
+                      <Cell key={i} fill={entry.fill} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+
+        </div>
+      )}
 
       {/* Insured users */}
       <div className="card">
-        <h3>Insured Users ({usersLoading ? "…" : users.length})</h3>
+        <div className="card-header">
+          <div className="card-header-icon icon-blue"><Users size={17} /></div>
+          <div>
+            <div className="card-title">Insured Users</div>
+            <div className="card-subtitle">All addresses holding an active policy</div>
+          </div>
+          <div className="section-count" style={{ marginLeft: "auto" }}>
+            {usersLoading ? "…" : users.length}
+          </div>
+        </div>
+
         {usersLoading ? (
-          <p>Loading…</p>
+          <div className="loading-container" style={{ padding: "2rem" }}>
+            <Loader size={16} className="spinner" />
+            <span>Loading…</span>
+          </div>
         ) : users.length === 0 ? (
-          <p className="hint">No insured users yet.</p>
+          <div className="empty-state">
+            <Users size={28} strokeWidth={1.5} />
+            <p>No insured users yet.</p>
+          </div>
         ) : (
           <div className="table-wrapper">
             <table>
@@ -67,26 +239,30 @@ export default function DashboardPage() {
                 <tr>
                   <th>#</th>
                   <th>Address</th>
-                  <th>Sinister</th>
-                  <th>Claimed</th>
+                  <th>Payout claimed</th>
                 </tr>
               </thead>
               <tbody>
                 {users.map((u, i) => (
                   <tr key={u.address}>
-                    <td>{i + 1}</td>
+                    <td style={{ color: "var(--text-muted)", width: 40 }}>{i + 1}</td>
                     <td>
                       <a
+                        className="addr-chip"
                         href={`https://sepolia.etherscan.io/address/${u.address}`}
                         target="_blank"
                         rel="noopener noreferrer"
                         title={u.address}
                       >
+                        <ExternalLink size={11} />
                         {shortAddr(u.address)}
                       </a>
                     </td>
-                    <td>—</td>
-                    <td>{u.hasClaimed ? "💸 Yes" : "—"}</td>
+                    <td>
+                      {u.hasClaimed
+                        ? <span className="claimed-yes"><CheckCircle size={13} /> Claimed</span>
+                        : <span className="claimed-no"><Clock size={13} style={{ display: "inline", verticalAlign: "middle" }} /> &nbsp;Pending</span>}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -97,11 +273,27 @@ export default function DashboardPage() {
 
       {/* Event history */}
       <div className="card">
-        <h3>Transaction History</h3>
+        <div className="card-header">
+          <div className="card-header-icon icon-blue"><Hash size={17} /></div>
+          <div>
+            <div className="card-title">Transaction History</div>
+            <div className="card-subtitle">All contract events since deployment</div>
+          </div>
+          <div className="section-count" style={{ marginLeft: "auto" }}>
+            {eventsLoading ? "…" : events.length}
+          </div>
+        </div>
+
         {eventsLoading ? (
-          <p>Loading…</p>
+          <div className="loading-container" style={{ padding: "2rem" }}>
+            <Loader size={16} className="spinner" />
+            <span>Scanning blockchain…</span>
+          </div>
         ) : events.length === 0 ? (
-          <p className="hint">No on-chain events yet.</p>
+          <div className="empty-state">
+            <Hash size={28} strokeWidth={1.5} />
+            <p>No on-chain events yet.</p>
+          </div>
         ) : (
           <div className="table-wrapper">
             <table>
@@ -110,7 +302,7 @@ export default function DashboardPage() {
                   <th>Event</th>
                   <th>Address</th>
                   <th>Block</th>
-                  <th>TxHash</th>
+                  <th>Transaction</th>
                 </tr>
               </thead>
               <tbody>
@@ -120,31 +312,37 @@ export default function DashboardPage() {
                     <tr key={i}>
                       <td>
                         <span className={`event-badge event-${ev.type.toLowerCase()}`}>
-                          {ev.type}
+                          {eventLabel(ev.type)}
                         </span>
                       </td>
                       <td>
                         {userAddr ? (
                           <a
+                            className="addr-chip"
                             href={`https://sepolia.etherscan.io/address/${userAddr}`}
                             target="_blank"
                             rel="noopener noreferrer"
                             title={userAddr}
                           >
+                            <ExternalLink size={11} />
                             {shortAddr(userAddr)}
                           </a>
                         ) : (
-                          "—"
+                          <span style={{ color: "var(--text-dim)" }}>—</span>
                         )}
                       </td>
-                      <td>{ev.blockNumber}</td>
+                      <td style={{ color: "var(--text-muted)", fontFamily: "monospace", fontSize: "0.8rem" }}>
+                        {ev.blockNumber}
+                      </td>
                       <td>
                         <a
+                          className="addr-chip"
                           href={ev.explorerUrl}
                           target="_blank"
                           rel="noopener noreferrer"
                           title={ev.txHash}
                         >
+                          <ExternalLink size={11} />
                           {shortAddr(ev.txHash)}
                         </a>
                       </td>
