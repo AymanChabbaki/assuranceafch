@@ -556,6 +556,20 @@ tbody tr:hover td { background: var(--bg-hover); }
 }
 .addr-chip:hover { color: var(--accent); }
 
+/* Copyable address hover effect */
+.addr-chip span[title^="Click"],
+.addr-chip span[title^="Copied"] {
+  transition: color 0.2s ease;
+}
+.addr-chip span[title^="Click"]:hover {
+  color: var(--accent);
+}
+
+/* Wallet pill copy feedback */
+.wallet-pill:active {
+  transform: scale(0.98);
+}
+
 /* ─── Claimed badge ──────────────────────────────────────────────── */
 .claimed-yes {
   display: inline-flex;

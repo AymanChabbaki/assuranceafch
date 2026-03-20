@@ -5,10 +5,10 @@ import { ethers } from "ethers";
 import {
   Shield, Coins, TrendingUp, Users, Wallet, Activity,
   CheckCircle, XCircle, Clock, AlertTriangle, ExternalLink,
-  Loader, Globe, ArrowRight,
+  Loader, Globe, ArrowRight, Copy, Check,
 } from "lucide-react";
 import { useContractInfo } from "../hooks/useContractInfo";
-import { CONTRACT_ADDRESS, CONTRACT_ABI } from "../config/contract";
+import { CONTRACT_ADDRESS, CONTRACT_ABI, OWNER_ADDRESS } from "../config/contract";
 import type { WalletState } from "../types";
 
 interface Props {
@@ -17,6 +17,36 @@ interface Props {
 }
 
 interface TxResult { type: "success" | "error" | "pending"; message: string; hash?: string; }
+
+// Copyable address component
+function CopyableAddress({ address }: { address: string }) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(address);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      console.error("Failed to copy:", err);
+    }
+  };
+
+  return (
+    <span 
+      onClick={handleCopy}
+      style={{ cursor: "pointer", display: "inline-flex", alignItems: "center", gap: "0.35rem" }}
+      title={copied ? "Copied!" : "Click to copy full address"}
+    >
+      {address.slice(0, 10)}…{address.slice(-6)}
+      {copied ? (
+        <Check size={12} style={{ color: "var(--success)" }} />
+      ) : (
+        <Copy size={12} style={{ opacity: 0.5 }} />
+      )}
+    </span>
+  );
+}
 
 export default function UserPage({ wallet, getSigner }: Props) {
   const { info, loading, error, refetch } = useContractInfo();
@@ -145,7 +175,21 @@ export default function UserPage({ wallet, getSigner }: Props) {
             <div>
               <div className="card-title">Your Status</div>
               <div className="card-subtitle">
-                {wallet.address?.slice(0, 10)}…{wallet.address?.slice(-6)}
+                <CopyableAddress address={wallet.address!} />
+                {wallet.isOwner && (
+                  <span style={{ 
+                    marginLeft: "0.5rem", 
+                    background: "linear-gradient(135deg, var(--accent) 0%, var(--accent-2) 100%)",
+                    color: "#fff",
+                    borderRadius: "4px",
+                    padding: "2px 8px",
+                    fontSize: "0.7rem",
+                    fontWeight: 700,
+                    textTransform: "uppercase",
+                  }}>
+                    Owner
+                  </span>
+                )}
               </div>
             </div>
           </div>

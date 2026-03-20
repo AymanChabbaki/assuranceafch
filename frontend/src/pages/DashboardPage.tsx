@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import {
   BarChart2, Users, Hash, ExternalLink, Loader,
   CheckCircle, Clock, AlertCircle, RefreshCw, PieChart as PieIcon,
+  Copy, Check,
 } from "lucide-react";
 import {
   PieChart, Pie, Cell, Tooltip, ResponsiveContainer,
@@ -52,6 +53,45 @@ export default function DashboardPage() {
     return () => clearInterval(interval);
   }, [fetchUsers, fetchEvents]);
 
+  // Copyable address component
+  function CopyableAddr({ addr, isTx = false }: { addr: string | undefined | null; isTx?: boolean }) {
+    const [copied, setCopied] = useState(false);
+
+    if (!addr) return <span>—</span>;
+
+    const handleCopy = async (e: React.MouseEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      try {
+        await navigator.clipboard.writeText(addr);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      } catch (err) {
+        console.error("Failed to copy:", err);
+      }
+    };
+
+    const display = isTx 
+      ? `${addr.slice(0, 6)}…${addr.slice(-4)}`
+      : `${addr.slice(0, 6)}…${addr.slice(-4)}`;
+
+    return (
+      <span 
+        onClick={handleCopy}
+        style={{ cursor: "pointer", display: "inline-flex", alignItems: "center", gap: "0.3rem" }}
+        title={copied ? "Copied!" : "Click to copy"}
+      >
+        {display}
+        {copied ? (
+          <Check size={11} style={{ color: "var(--success)" }} />
+        ) : (
+          <Copy size={11} style={{ opacity: 0.4 }} />
+        )}
+      </span>
+    );
+  }
+
+  // Legacy shortAddr for non-interactive uses
   function shortAddr(addr: string | undefined | null) {
     if (!addr) return "—";
     return `${addr.slice(0, 6)}…${addr.slice(-4)}`;
@@ -247,16 +287,10 @@ export default function DashboardPage() {
                   <tr key={u.address}>
                     <td style={{ color: "var(--text-muted)", width: 40 }}>{i + 1}</td>
                     <td>
-                      <a
-                        className="addr-chip"
-                        href={`https://sepolia.etherscan.io/address/${u.address}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        title={u.address}
-                      >
+                      <span className="addr-chip">
                         <ExternalLink size={11} />
-                        {shortAddr(u.address)}
-                      </a>
+                        <CopyableAddr addr={u.address} />
+                      </span>
                     </td>
                     <td>
                       {u.hasClaimed
@@ -317,16 +351,10 @@ export default function DashboardPage() {
                       </td>
                       <td>
                         {userAddr ? (
-                          <a
-                            className="addr-chip"
-                            href={`https://sepolia.etherscan.io/address/${userAddr}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            title={userAddr}
-                          >
+                          <span className="addr-chip">
                             <ExternalLink size={11} />
-                            {shortAddr(userAddr)}
-                          </a>
+                            <CopyableAddr addr={userAddr} />
+                          </span>
                         ) : (
                           <span style={{ color: "var(--text-dim)" }}>—</span>
                         )}
@@ -335,16 +363,10 @@ export default function DashboardPage() {
                         {ev.blockNumber}
                       </td>
                       <td>
-                        <a
-                          className="addr-chip"
-                          href={ev.explorerUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          title={ev.txHash}
-                        >
+                        <span className="addr-chip">
                           <ExternalLink size={11} />
-                          {shortAddr(ev.txHash)}
-                        </a>
+                          <CopyableAddr addr={ev.txHash} isTx />
+                        </span>
                       </td>
                     </tr>
                   );

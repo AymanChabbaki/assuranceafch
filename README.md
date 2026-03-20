@@ -34,17 +34,20 @@ Users subscribe to an insurance policy by paying a premium on-chain; if a sinist
 ## Smart Contract
 
 ### Deployment
-| Property | Value |
-|---|---|
-| Network | Sepolia Testnet (chain ID 11155111) |
-| Address | `0xBF7b35D93622974F005EaFC5553FD521D7Be71d4` |
-| Owner | `0xF2A1290978ea12B904bDb29087a5E9557E21976c` |
-| Etherscan | https://sepolia.etherscan.io/address/0xBF7b35D93622974F005EaFC5553FD521D7Be71d4 |
+
+| Property  | Value                                                                           |
+| --------- | ------------------------------------------------------------------------------- |
+| Network   | Sepolia Testnet (chain ID 11155111)                                             |
+| Address   | `0x3E581d9252d33dc03E5B8da595f7a46BB30219e7`                                    |
+| Owner     | `0xF2A1290978ea12B904bDb29087a5E9557E21976c`                                    |
+| Etherscan | https://sepolia.etherscan.io/address/0x3E581d9252d33dc03E5B8da595f7a46BB30219e7 |
 
 ### Contract: `InsuranceContract.sol`
+
 Written in Solidity, compiled and deployed with Hardhat.
 
 #### State Variables
+
 ```solidity
 address public owner;
 uint256 public premiumAmount;   // ETH required to subscribe
@@ -56,15 +59,17 @@ address[] private insuredUsers;
 ```
 
 #### Key Functions
-| Function | Access | Description |
-|---|---|---|
-| `subscribe()` | Public, payable | Pay `premiumAmount` ETH to get insured |
-| `declareSinister()` | Owner only | Irreversibly opens all payouts |
-| `claimPayout()` | Insured only | Claim `payoutAmount` ETH after sinister |
-| `getContractInfo()` | View | Returns all contract state in one call |
-| `getInsuredUsers()` | View | Returns the full list of insured addresses |
+
+| Function            | Access          | Description                                |
+| ------------------- | --------------- | ------------------------------------------ |
+| `subscribe()`       | Public, payable | Pay `premiumAmount` ETH to get insured     |
+| `declareSinister()` | Owner only      | Irreversibly opens all payouts             |
+| `claimPayout()`     | Insured only    | Claim `payoutAmount` ETH after sinister    |
+| `getContractInfo()` | View            | Returns all contract state in one call     |
+| `getInsuredUsers()` | View            | Returns the full list of insured addresses |
 
 #### Events
+
 ```solidity
 event Subscription(address indexed user, uint256 premium);
 event SinisterDeclared(address indexed declaredBy);
@@ -72,6 +77,7 @@ event PayoutClaimed(address indexed user, uint256 amount);
 ```
 
 #### Security Patterns
+
 - **Reentrancy guard**: uses Checks-Effects-Interactions pattern before ETH transfer in `claimPayout()`
 - **Access control**: `onlyOwner` modifier on `declareSinister()`
 - **Duplicate check**: reverts if already subscribed or already claimed
@@ -84,22 +90,25 @@ event PayoutClaimed(address indexed user, uint256 amount);
 ## Backend API
 
 ### Stack
-| Package | Version | Purpose |
-|---|---|---|
-| Node.js | 18+ | Runtime |
-| Express | 5.x | HTTP server |
-| ethers | 6.x | Blockchain interaction (read-only) |
-| helmet | 8.x | Secure HTTP headers |
-| cors | 2.x | Origin whitelist |
-| express-rate-limit | 8.x | 100 req / 15 min per IP |
-| dotenv | 17.x | Environment config |
+
+| Package            | Version | Purpose                            |
+| ------------------ | ------- | ---------------------------------- |
+| Node.js            | 18+     | Runtime                            |
+| Express            | 5.x     | HTTP server                        |
+| ethers             | 6.x     | Blockchain interaction (read-only) |
+| helmet             | 8.x     | Secure HTTP headers                |
+| cors               | 2.x     | Origin whitelist                   |
+| express-rate-limit | 8.x     | 100 req / 15 min per IP            |
+| dotenv             | 17.x    | Environment config                 |
 
 ### Environment Variables
+
 Create `backend/.env` (copy from `backend/.env.example`):
+
 ```env
 PORT=3000
 SEPOLIA_RPC_URL=https://eth-sepolia.g.alchemy.com/v2/YOUR_ALCHEMY_KEY
-CONTRACT_ADDRESS=0xBF7b35D93622974F005EaFC5553FD521D7Be71d4
+CONTRACT_ADDRESS=0x3E581d9252d33dc03E5B8da595f7a46BB30219e7
 FRONTEND_URL=http://localhost:5173
 CONTRACT_DEPLOY_BLOCK=8500000   # block when contract was deployed
 ```
@@ -107,13 +116,17 @@ CONTRACT_DEPLOY_BLOCK=8500000   # block when contract was deployed
 ### Endpoints
 
 #### `GET /api/health`
+
 Returns server status.
+
 ```json
 { "status": "ok", "timestamp": "2025-01-01T00:00:00.000Z" }
 ```
 
 #### `GET /api/contract-info`
+
 Returns current on-chain state.
+
 ```json
 {
   "address": "0xBF7b35...",
@@ -130,7 +143,9 @@ Returns current on-chain state.
 ```
 
 #### `GET /api/insured-users`
+
 Returns all insured addresses and their claim status.
+
 ```json
 {
   "count": 3,
@@ -142,9 +157,11 @@ Returns all insured addresses and their claim status.
 ```
 
 #### `GET /api/transactions`
+
 Returns the full on-chain event history (from deploy block to latest).
 
 Returns `503` while the initial cache is still building (first load).
+
 ```json
 {
   "total": 5,
@@ -180,6 +197,7 @@ Returns `503` while the initial cache is still building (first load).
 ```
 
 ### Event Cache
+
 The `/api/transactions` endpoint queries blockchain events by fetching logs in chunks of 2 000 blocks (Alchemy free-tier limit). On server start, `eventCache.js` pre-fetches all historical events from `CONTRACT_DEPLOY_BLOCK` to latest. Subsequent requests are served from memory and periodically refreshed.
 
 ---
@@ -187,20 +205,23 @@ The `/api/transactions` endpoint queries blockchain events by fetching logs in c
 ## Frontend
 
 ### Stack
-| Package | Version | Purpose |
-|---|---|---|
-| React | 19.x | UI framework |
-| TypeScript | 5.9 | Type safety |
-| Vite | 7.x | Build tool / dev server |
-| ethers | 6.x | MetaMask interaction (writes) |
-| react-router-dom | 6.x | Client-side routing |
-| lucide-react | latest | Icon library (replaces all emojis) |
-| axios | latest | HTTP client for REST API |
+
+| Package          | Version | Purpose                            |
+| ---------------- | ------- | ---------------------------------- |
+| React            | 19.x    | UI framework                       |
+| TypeScript       | 5.9     | Type safety                        |
+| Vite             | 7.x     | Build tool / dev server            |
+| ethers           | 6.x     | MetaMask interaction (writes)      |
+| react-router-dom | 6.x     | Client-side routing                |
+| lucide-react     | latest  | Icon library (replaces all emojis) |
+| axios            | latest  | HTTP client for REST API           |
 
 ### Environment Variables
+
 Create `frontend/.env` (copy from `frontend/.env.example`):
+
 ```env
-VITE_CONTRACT_ADDRESS=0xBF7b35D93622974F005EaFC5553FD521D7Be71d4
+VITE_CONTRACT_ADDRESS=0x3E581d9252d33dc03E5B8da595f7a46BB30219e7
 VITE_OWNER_ADDRESS=0xF2A1290978ea12B904bDb29087a5E9557E21976c
 VITE_NETWORK=sepolia
 VITE_API_URL=http://localhost:3000
@@ -209,7 +230,9 @@ VITE_API_URL=http://localhost:3000
 ### Pages & Features
 
 #### `/` — UserPage
+
 The main user-facing insurance portal:
+
 - Displays 5 live stats: premium, payout, contract balance, insured count, sinister status
 - **Subscribe**: sends `subscribe()` transaction via MetaMask with `premiumAmount` ETH
 - **Claim Payout**: sends `claimPayout()` if sinister declared and user is insured
@@ -217,26 +240,33 @@ The main user-facing insurance portal:
 - Auto-detects wallet state (not connected, wrong network, already subscribed, already claimed)
 
 #### `/admin` — AdminPage _(owner only)_
+
 Restricted to the contract owner address:
+
 - Shows contract overview: insured count, pool balance, required payout total
 - Solvency warning if contract is underfunded before declaring sinister
 - **Declare Sinister**: sends `declareSinister()` transaction (irreversible, clearly warned)
 - Access control enforced on-page (non-owner sees a deny message)
 
 #### `/dashboard` — DashboardPage
+
 Public transparency view, auto-refreshes every 15 seconds:
+
 - **Insured Users table**: address chips with Etherscan links, claimed / pending badges
 - **Transaction History table**: event type pills (Subscribed / Sinister / Payout), address chips, block numbers, tx links
 
 ### Custom Hooks
-| Hook | Returns | Description |
-|---|---|---|
-| `useWallet` | `WalletState`, `getSigner`, `connectWallet` | MetaMask connection, network detection, owner check |
-| `useContractInfo` | `info`, `loading`, `refetch` | Polls `/api/contract-info` every 15 s |
-| `useContract` | action functions | Wraps `subscribe()` and `claimPayout()` calls |
+
+| Hook              | Returns                                     | Description                                         |
+| ----------------- | ------------------------------------------- | --------------------------------------------------- |
+| `useWallet`       | `WalletState`, `getSigner`, `connectWallet` | MetaMask connection, network detection, owner check |
+| `useContractInfo` | `info`, `loading`, `refetch`                | Polls `/api/contract-info` every 15 s               |
+| `useContract`     | action functions                            | Wraps `subscribe()` and `claimPayout()` calls       |
 
 ### Design System
+
 Premium dark theme built with CSS custom properties:
+
 - **Font**: Inter (Google Fonts)
 - **Palette**: multi-layer dark backgrounds with glassmorphism cards (`backdrop-filter: blur`)
 - **Accents**: gradient blue-to-purple buttons with glow shadows
@@ -248,6 +278,7 @@ Premium dark theme built with CSS custom properties:
 ## Local Setup
 
 ### Prerequisites
+
 - Node.js 18+
 - MetaMask browser extension
 - Sepolia testnet ETH (faucet: https://faucets.chain.link/sepolia)
@@ -298,6 +329,7 @@ npm run dev
 Frontend runs on `http://localhost:5173`.
 
 ### 5. Connect MetaMask
+
 1. Open `http://localhost:5173`
 2. Click **Connect Wallet**
 3. Approve the MetaMask connection prompt
@@ -324,7 +356,9 @@ npx hardhat run scripts/deploy.js --network sepolia
 ```
 
 ### Test Coverage
+
 The test suite covers:
+
 - `subscribe()`: success, wrong value, double-subscribe
 - `declareSinister()`: access check (non-owner reverts), idempotency
 - `claimPayout()`: success, before sinister (reverts), double-claim (reverts), underfunded contract, reentrancy attack simulation
@@ -335,12 +369,12 @@ The test suite covers:
 
 ## Security
 
-| Layer | Measure |
-|---|---|
-| Smart contract | Checks-Effects-Interactions, reentrancy guard, strict access control |
-| Backend | Helmet (CSP, HSTS, X-Frame-Options), CORS origin whitelist, rate limiting, no private keys |
-| Frontend | No secrets in client code, all env vars prefixed `VITE_` (public), MetaMask signs txs (private key never leaves browser) |
-| Network | All writes go through MetaMask — backend is strictly read-only |
+| Layer          | Measure                                                                                                                  |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| Smart contract | Checks-Effects-Interactions, reentrancy guard, strict access control                                                     |
+| Backend        | Helmet (CSP, HSTS, X-Frame-Options), CORS origin whitelist, rate limiting, no private keys                               |
+| Frontend       | No secrets in client code, all env vars prefixed `VITE_` (public), MetaMask signs txs (private key never leaves browser) |
+| Network        | All writes go through MetaMask — backend is strictly read-only                                                           |
 
 ---
 
@@ -401,7 +435,7 @@ Projet Security/
 
 ```
 Network  : Sepolia (chainId 11155111)
-Contract : 0xBF7b35D93622974F005EaFC5553FD521D7Be71d4
+Contract : 0x3E581d9252d33dc03E5B8da595f7a46BB30219e7
 Owner    : 0xF2A1290978ea12B904bDb29087a5E9557E21976c
-Explorer : https://sepolia.etherscan.io/address/0xBF7b35D93622974F005EaFC5553FD521D7Be71d4
+Explorer : https://sepolia.etherscan.io/address/0x3E581d9252d33dc03E5B8da595f7a46BB30219e7
 ```

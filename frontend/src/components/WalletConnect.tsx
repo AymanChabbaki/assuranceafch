@@ -1,4 +1,5 @@
-import { Wallet, AlertTriangle, ChevronRight } from "lucide-react";
+import { useState } from "react";
+import { Wallet, AlertTriangle, Check, Copy } from "lucide-react";
 import type { WalletState } from "../types";
 
 interface Props {
@@ -12,6 +13,19 @@ function shortAddr(addr: string) {
 }
 
 export default function WalletConnect({ wallet, onConnect, onSwitch }: Props) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = async () => {
+    if (!wallet.address) return;
+    try {
+      await navigator.clipboard.writeText(wallet.address);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      console.error("Failed to copy:", err);
+    }
+  };
+
   if (!wallet.isConnected) {
     return (
       <button className="btn btn-primary" onClick={onConnect}>
@@ -34,11 +48,21 @@ export default function WalletConnect({ wallet, onConnect, onSwitch }: Props) {
 
   return (
     <div className="wallet-bar">
-      <div className="wallet-pill">
+      <button 
+        className="wallet-pill" 
+        onClick={handleCopy}
+        title={copied ? "Copied!" : "Click to copy full address"}
+        style={{ cursor: "pointer" }}
+      >
         <span className="wallet-dot" />
         <span>{shortAddr(wallet.address!)}</span>
+        {copied ? (
+          <Check size={12} style={{ color: "var(--success)" }} />
+        ) : (
+          <Copy size={12} style={{ opacity: 0.5 }} />
+        )}
         {wallet.isOwner && <span className="badge-admin">Admin</span>}
-      </div>
+      </button>
     </div>
   );
 }

@@ -1,7 +1,6 @@
 // src/config/eventCache.js
-// Solves Alchemy free-tier 10-block limit for eth_getLogs.
-// On startup: fetches historical events in batches of 10 blocks.
-// Going forward: listens to live contract events and appends them to cache.
+// Solves Alchemy free-tier rate limits for eth_getLogs.
+// Uses exponential backoff and larger delays to avoid 429 errors.
 
 const { contract, provider } = require("./contract");
 
@@ -12,8 +11,11 @@ const cache = {
   ready: false,
 };
 
-// ── Batch size must stay ≤ 10 for Alchemy free tier ──────────────────────────
-const BATCH_SIZE = 9;
+// ── Batch size must stay small for Alchemy free tier ──────────────────────────
+const BATCH_SIZE = 5;
+
+// ── Delay between requests (ms) ──────────────────────────────────────────────
+const DELAY_MS = 500; // Increased from 200ms to avoid rate limits
 
 // ── Format helpers ────────────────────────────────────────────────────────────
 function formatSubscribed(e) {
@@ -46,40 +48,86 @@ function formatPayout(e) {
   };
 }
 
-// ── Fetch one batch of events across all event types ─────────────────────────
-async function fetchBatch(from, to) {
-  const [subs, sins, pays] = await Promise.all([
-    contract.queryFilter(contract.filters.Subscribed(),       from, to),
-    contract.queryFilter(contract.filters.SinisterDeclared(), from, to),
-    contract.queryFilter(contract.filters.PayoutClaimed(),    from, to),
-  ]);
-  return [
-    ...subs.map(formatSubscribed),
-    ...sins.map(formatSinister),
-    ...pays.map(formatPayout),
-  ];
+// ── Sleep helper ──────────────────────────────────────────────────────────────
+function sleep(ms) {
+  return new Promise((r) => setTimeout(r, ms));
 }
 
-// ── Initial backfill: scan from deployBlock to latest in BATCH_SIZE chunks ───
+// ── Fetch with retry and exponential backoff ──────────────────────────────────
+async function fetchWithRetry(from, to, retries = 3) {
+  for (let attempt = 0; attempt < retries; attempt++) {
+    try {
+      const [subs, sins, pays] = await Promise.all([
+        contract.queryFilter(contract.filters.Subscribed(),       from, to),
+        contract.queryFilter(contract.filters.SinisterDeclared(), from, to),
+        contract.queryFilter(contract.filters.PayoutClaimed(),    from, to),
+      ]);
+      return [
+        ...subs.map(formatSubscribed),
+        ...sins.map(formatSinister),
+        ...pays.map(formatPayout),
+      ];
+    } catch (err) {
+      const isRateLimit = err.message?.includes("429") || 
+                          err.message?.includes("rate limit") ||
+                          err.message?.includes("compute units") ||
+                          err.message?.includes("exceeded its compute units");
+      
+      if (isRateLimit && attempt < retries - 1) {
+        const backoffDelay = Math.min(1000 * Math.pow(2, attempt), 10000); // Max 10s
+        console.warn(`[eventCache] Rate limit hit, retrying batch ${from}-${to} in ${backoffDelay}ms (attempt ${attempt + 1}/${retries})`);
+        await sleep(backoffDelay);
+      } else if (attempt === retries - 1) {
+        console.warn(`[eventCache] Batch ${from}-${to} failed after ${retries} attempts:`, err.message);
+        return []; // Return empty on final failure
+      } else {
+        throw err;
+      }
+    }
+  }
+  return [];
+}
+
+// ── Initial backfill: scan from deployBlock to latest in batches ──────────────
 async function backfill() {
   const deployBlock = parseInt(process.env.CONTRACT_DEPLOY_BLOCK) || 0;
-  const latest = await provider.getBlockNumber();
+  let latest;
+  
+  try {
+    latest = await provider.getBlockNumber();
+  } catch (err) {
+    console.error("[eventCache] Failed to get latest block:", err.message);
+    cache.ready = true;
+    return;
+  }
 
   console.log(
-    `[eventCache] Backfilling blocks ${deployBlock} → ${latest} (batches of ${BATCH_SIZE})...`
+    `[eventCache] Backfilling blocks ${deployBlock} → ${latest} (batches of ${BATCH_SIZE}, delay ${DELAY_MS}ms)...`
   );
 
   const newEvents = [];
+  const totalBatches = Math.ceil((latest - deployBlock) / BATCH_SIZE);
+  let completedBatches = 0;
+  
   for (let from = deployBlock; from <= latest; from += BATCH_SIZE) {
     const to = Math.min(from + BATCH_SIZE - 1, latest);
+    
     try {
-      const batch = await fetchBatch(from, to);
+      const batch = await fetchWithRetry(from, to);
       newEvents.push(...batch);
     } catch (err) {
-      console.warn(`[eventCache] Batch ${from}-${to} failed:`, err.message);
+      console.warn(`[eventCache] Batch ${from}-${to} error:`, err.message);
     }
-    // Small delay to avoid rate-limiting on free tier
-    await new Promise((r) => setTimeout(r, 200));
+    
+    completedBatches++;
+    
+    // Progress logging every 50 batches
+    if (completedBatches % 50 === 0 || completedBatches === totalBatches) {
+      console.log(`[eventCache] Progress: ${completedBatches}/${totalBatches} batches (${Math.round(completedBatches/totalBatches*100)}%)`);
+    }
+    
+    // Delay to avoid rate-limiting
+    await sleep(DELAY_MS);
   }
 
   cache.events = newEvents.sort((a, b) => b.blockNumber - a.blockNumber);

@@ -5,6 +5,7 @@ import { ethers } from "ethers";
 import {
   Lock, Users, Activity, AlertTriangle, CheckCircle,
   XCircle, Loader, ExternalLink, Zap, Info, BarChart2, PieChart as PieIcon,
+  PlusCircle, Copy, Check,
 } from "lucide-react";
 import {
   RadialBarChart, RadialBar, PolarAngleAxis, ResponsiveContainer,
@@ -26,6 +27,9 @@ export default function AdminPage({ wallet, getSigner }: Props) {
   const { info, loading, refetch } = useContractInfo();
   const [tx, setTx] = useState<TxResult | null>(null);
   const [busy, setBusy] = useState(false);
+  const [fundAmount, setFundAmount] = useState("0.1");
+  const [showConfirm, setShowConfirm] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   if (!wallet.isConnected) return (
     <div className="page">
@@ -58,6 +62,10 @@ export default function AdminPage({ wallet, getSigner }: Props) {
   );
 
   async function handleDeclareSinister() {
+    if (!showConfirm) {
+      setShowConfirm(true);
+      return;
+    }
     setBusy(true); setTx(null);
     try {
       const signer = await getSigner();
@@ -67,12 +75,39 @@ export default function AdminPage({ wallet, getSigner }: Props) {
       setTx({ type: "pending", message: "Transaction submitted — waiting for confirmation…" });
       await txObj.wait();
       setTx({ type: "success", message: "Sinister declared successfully. Payouts are now open.", hash: txObj.hash });
+      setShowConfirm(false);
       refetch();
     } catch (err: unknown) {
       const msg = (err as { reason?: string; message?: string }).reason || (err as { message?: string }).message || "Transaction failed";
       setTx({ type: "error", message: msg });
     } finally { setBusy(false); }
   }
+
+  async function handleFundContract() {
+    setBusy(true); setTx(null);
+    try {
+      const signer = await getSigner();
+      if (!signer) return;
+      // Send ETH directly to contract via receive() function
+      const txObj = await signer.sendTransaction({
+        to: CONTRACT_ADDRESS,
+        value: ethers.parseEther(fundAmount),
+      });
+      setTx({ type: "pending", message: "Funding contract — waiting for confirmation…" });
+      await txObj.wait();
+      setTx({ type: "success", message: `Sent ${fundAmount} ETH to contract!`, hash: txObj.hash });
+      refetch();
+    } catch (err: unknown) {
+      const msg = (err as { reason?: string; message?: string }).reason || (err as { message?: string }).message || "Transaction failed";
+      setTx({ type: "error", message: msg });
+    } finally { setBusy(false); }
+  }
+
+  const copyContractAddress = async () => {
+    await navigator.clipboard.writeText(CONTRACT_ADDRESS);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
 
   const ethNeeded = info
     ? (parseFloat(info.payoutEth) * parseInt(info.insuredCount)).toFixed(4)
@@ -261,6 +296,58 @@ export default function AdminPage({ wallet, getSigner }: Props) {
 
           </div>
 
+          {/* Fund Contract Card */}
+          <div className="card">
+            <div className="card-header">
+              <div className="card-header-icon icon-green"><PlusCircle size={17} /></div>
+              <div>
+                <div className="card-title">Fund Contract</div>
+                <div className="card-subtitle">Add ETH to cover payouts</div>
+              </div>
+            </div>
+
+            <div className="action-card">
+              <p className="action-description">
+                Send ETH directly to the contract address. This ETH will be used to pay insured users when they claim.
+              </p>
+
+              <div className="action-meta" style={{ marginBottom: "1rem", cursor: "pointer" }} onClick={copyContractAddress}>
+                <span style={{ fontFamily: "monospace" }}>{CONTRACT_ADDRESS}</span>
+                {copied ? <Check size={12} style={{ color: "var(--success)" }} /> : <Copy size={12} />}
+              </div>
+
+              <div style={{ display: "flex", gap: "0.75rem", alignItems: "center", marginBottom: "1rem" }}>
+                <input
+                  type="number"
+                  value={fundAmount}
+                  onChange={(e) => setFundAmount(e.target.value)}
+                  step="0.01"
+                  min="0.001"
+                  style={{
+                    background: "var(--bg-2)",
+                    border: "1px solid var(--border)",
+                    borderRadius: "var(--radius-sm)",
+                    padding: "0.5rem 0.75rem",
+                    color: "var(--text)",
+                    fontSize: "0.9rem",
+                    width: "100px",
+                  }}
+                />
+                <span style={{ color: "var(--text-muted)" }}>ETH</span>
+              </div>
+
+              <button
+                className="btn btn-success"
+                onClick={handleFundContract}
+                disabled={busy || parseFloat(fundAmount) <= 0}
+              >
+                {busy
+                  ? <><Loader size={14} className="spinner" /> Processing…</>
+                  : <><PlusCircle size={15} /> Fund Contract</>}
+              </button>
+            </div>
+          </div>
+
           {/* Solvency check */}
           {isSolvent === false && (
             <div className="alert alert-warning">
@@ -268,7 +355,8 @@ export default function AdminPage({ wallet, getSigner }: Props) {
               <p>
                 <strong>Underfunded:</strong> The contract only has {info?.contractBalanceEth} ETH
                 but needs {ethNeeded} ETH to pay all {info?.insuredCount} insured users.
-                Fund the contract before declaring a sinister.
+                <br />
+                <strong>Shortage: {(parseFloat(ethNeeded) - parseFloat(info?.contractBalanceEth || "0")).toFixed(4)} ETH</strong>
               </p>
             </div>
           )}
@@ -287,6 +375,42 @@ export default function AdminPage({ wallet, getSigner }: Props) {
               <div className="alert alert-success">
                 <CheckCircle size={16} className="alert-icon" />
                 <p>Sinister already declared. All insured users can now claim their payout of <strong>{info.payoutEth} ETH</strong>.</p>
+              </div>
+            ) : showConfirm ? (
+              <div className="action-card">
+                <div className="alert alert-danger" style={{ borderColor: "rgba(248,113,113,0.5)" }}>
+                  <AlertTriangle size={18} className="alert-icon" />
+                  <p>
+                    <strong>⚠️ FINAL WARNING</strong><br /><br />
+                    You are about to declare a sinister. This will allow <strong>{info?.insuredCount}</strong> users 
+                    to claim <strong>{ethNeeded} ETH</strong> total.<br /><br />
+                    {!isSolvent && (
+                      <span style={{ color: "var(--danger)" }}>
+                        ⚠️ Contract is UNDERFUNDED! You need {(parseFloat(ethNeeded) - parseFloat(info?.contractBalanceEth || "0")).toFixed(4)} more ETH.<br /><br />
+                      </span>
+                    )}
+                    This action <strong>CANNOT BE UNDONE</strong>.
+                  </p>
+                </div>
+
+                <div style={{ display: "flex", gap: "0.75rem" }}>
+                  <button
+                    className="btn btn-ghost"
+                    onClick={() => setShowConfirm(false)}
+                    disabled={busy}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    className="btn btn-danger"
+                    onClick={handleDeclareSinister}
+                    disabled={busy}
+                  >
+                    {busy
+                      ? <><Loader size={14} className="spinner" /> Processing…</>
+                      : <><Zap size={15} /> Yes, Declare Sinister</>}
+                  </button>
+                </div>
               </div>
             ) : (
               <div className="action-card">
@@ -307,9 +431,7 @@ export default function AdminPage({ wallet, getSigner }: Props) {
                   onClick={handleDeclareSinister}
                   disabled={busy}
                 >
-                  {busy
-                    ? <><Loader size={14} className="spinner" /> Processing…</>
-                    : <><Zap size={15} /> Declare Sinister</>}
+                  <Zap size={15} /> Declare Sinister
                 </button>
               </div>
             )}
